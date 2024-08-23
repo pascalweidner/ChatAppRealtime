@@ -26,6 +26,17 @@ void handleRequest(void *arg)
     int *clientFd = (int *)arg;
 
     char *request = (char *)malloc(SIZE * sizeof(char));
+
+    read(*clientFd, request, SIZE);
+
+    char method[10], info[100];
+
+    sscanf(request, "%s %s", method, info);
+
+    if (method == "Login")
+    {
+        login(request, clientFd);
+    }
 }
 
 void runServer()
