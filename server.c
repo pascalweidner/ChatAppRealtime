@@ -4,8 +4,11 @@
 #include <netdb.h>
 
 #include <sys/socket.h>
+#include <sys/time.h>
+#include <arpa/inet.h>
 #include <netinet/in.h>
 #include <unistd.h>
+#include <errno.h>
 
 #include <signal.h>
 #include <pthread.h>
@@ -15,11 +18,34 @@
 #define SIZE 1024  // buffer size
 #define PORT 2728  // port number
 #define BACKLOG 10 // number of pending connections queue will hold
+#define MAX_CLIENTS 4
 
-int serverSocket;
+int mastersockfd;
+int activeconnections = 0;
+struct sockaddr_in clientIPs[MAX_CLIENTS];
+int connfds[MAX_CLIENTS];
 struct sockaddr_in serverAddr;
+int addrlen = sizeof(serverAddr);
+char inBuffer[MAX_CLIENTS][1024] = {0};
+char outBuffer[MAX_CLIENTS][1024] = {0};
 
 ht *clientTable;
+
+void login(char *info, int *clientFd)
+{
+
+    if (ht_get(clientTable, info) == NULL)
+    {
+        ht_set(clientTable, info, (void *)clientFd);
+
+        // success
+        char *response = (char *)malloc(8 * sizeof(char));
+        strcpy(response, "success");
+
+        send(*clientFd, response, strlen(response), 0);
+        free(response);
+    }
+}
 
 void handleRequest(void *arg)
 {
@@ -29,35 +55,105 @@ void handleRequest(void *arg)
 
     read(*clientFd, request, SIZE);
 
-    char method[10], info[100];
+    char method[10];
+    char *info = (char *)malloc(100 * sizeof(char));
 
-    sscanf(request, "%s %s", method, info);
+    sscanf(info, "%s %s", method, info);
 
-    if (method == "Login")
+    if (strcmp(method, "LOGIN"))
     {
         login(request, clientFd);
     }
+    else if (strcmp(method, "LOGOUT"))
+    {
+        logout(request, clientFd);
+    }
+
+    free(request);
 }
 
 void runServer()
 {
+    fd_set readfds;
+    int max_fd, readyfds;
+
     while (1)
     {
-        struct sockaddr_in clientAddr;
-        socklen_t clientAddrLen = sizeof(clientAddr);
-        int *clientFd = malloc(sizeof(int));
+        FD_ZERO(&readfds);
 
-        if ((*clientFd = accept(serverSocket, (struct sockaddr *)&clientAddr, &clientAddrLen)) < 0)
+        // add mastersockfd
+        FD_SET(mastersockfd, &readfds);
+        max_fd = mastersockfd;
+
+        for (int i = 0; i < activeconnections; i++)
         {
-            perror("accept failed");
-            continue;
+            if (connfds[i] != 0)
+            {
+                FD_SET(connfds[i], &readfds);
+            }
+            if (connfds[i] > max_fd)
+            {
+                max_fd = connfds[i];
+            }
         }
 
-        printf("%d\n", *clientFd);
+        readyfds = select(max_fd + 1, &readfds, NULL, NULL, NULL);
 
-        pthread_t thread_id;
-        pthread_create(&thread_id, NULL, handleRequest, (void *)clientFd);
-        pthread_detach(thread_id);
+        if ((readyfds < 0) && (errno != EINTR))
+        {
+            printf("select error\n");
+        }
+
+        if (FD_ISSET(mastersockfd, &readfds))
+        {
+            if ((connfds[activeconnections] = accept(mastersockfd, (struct sockaddr *)&clientIPs[activeconnections], (socklen_t *)&addrlen)) < 0)
+            {
+                perror("accept error...");
+                exit(1);
+            }
+
+            fprintf(stdout, "New connection from %s\n", inet_ntoa(clientIPs[activeconnections].sin_addr));
+            activeconnections++;
+        }
+
+        for (int i = 0; i < activeconnections; i++)
+        {
+            // check if connection is active and it is ready to read
+            if (connfds[i] != 0 && FD_ISSET(connfds[i], &readfds))
+            {
+                // clear buffer
+                memset(inBuffer[i], 0, 1024);
+                memset(outBuffer[i], 0, 1024);
+            }
+
+            // read returns 0 if connection closed normally
+            // and - 1 if error
+            if (read(connfds[i], inBuffer[i], 1024) <= 0)
+            {
+                fprintf(stderr, "%s (code: %d)\n", strerror(errno), errno);
+                strncpy(outBuffer[i], inet_ntoa(clientIPs[i].sin_addr), INET_ADDRSTRLEN);
+                fprintf(stderr, "Host %s disconnected\n", outBuffer[i]);
+                close(connfds[i]);
+                connfds[i] = 0;
+                continue;
+            }
+
+            // get client ip
+            strncpy(outBuffer[i], inet_ntoa(clientIPs[i].sin_addr), INET_ADDRSTRLEN);
+
+            fprintf(stdout, "%s: %s", outBuffer[i], inBuffer[i]);
+
+            strcat(outBuffer[i], " : ");
+            strcat(outBuffer[i], inBuffer[i]);
+
+            for (int j = 0; j < activeconnections; j++)
+            {
+                if (connfds[j] != 0 && i != j)
+                {
+                    write(connfds[j], outBuffer[i], strlen(outBuffer[i]));
+                }
+            }
+        }
     }
 }
 
@@ -67,33 +163,27 @@ int main()
 
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(PORT);
-    serverAddr.sin_addr.s_addr = htonl(INADDR_LOOPBACK);
+    serverAddr.sin_addr.s_addr = INADDR_ANY;
 
-    if ((serverSocket = socket(AF_INET, SOCK_STREAM, 0)) < 0)
+    if ((mastersockfd = socket(AF_INET, SOCK_STREAM, 0)) <= 0)
     {
         perror("socket failed");
         exit(EXIT_FAILURE);
     }
 
-    setsockopt(serverSocket, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
+    setsockopt(mastersockfd, SOL_SOCKET, SO_REUSEADDR, &(int){1}, sizeof(int));
 
-    if (bind(serverSocket, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0)
+    if (bind(mastersockfd, (struct sockaddr *)&serverAddr, sizeof(serverAddr)) < 0)
     {
         perror("bind failed");
         exit(EXIT_FAILURE);
     }
 
-    if (listen(serverSocket, 10) < 0)
+    if (listen(mastersockfd, 3) < 0)
     {
         perror("listen failed");
         exit(EXIT_FAILURE);
     }
-
-    char hostBuffer[10000], serviceBuffer[100000];
-    int error = getnameinfo((struct sockaddr *)&serverAddr, sizeof(serverAddr), hostBuffer,
-                            sizeof(hostBuffer), serviceBuffer, sizeof(serviceBuffer), 0);
-
-    printf("\nServer is listening on http://%s:%s/\n\n", hostBuffer, serviceBuffer);
 
     runServer();
 
