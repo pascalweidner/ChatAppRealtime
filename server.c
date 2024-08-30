@@ -10,10 +10,7 @@
 #include <unistd.h>
 #include <errno.h>
 
-#include <signal.h>
-#include <pthread.h>
-
-#include "hashTable.h"
+#
 
 #define SIZE 1024  // buffer size
 #define PORT 2728  // port number
@@ -29,54 +26,12 @@ int addrlen = sizeof(serverAddr);
 char inBuffer[MAX_CLIENTS][1024] = {0};
 char outBuffer[MAX_CLIENTS][1024] = {0};
 
-ht *clientTable;
-
-void login(char *info, int *clientFd)
-{
-
-    if (ht_get(clientTable, info) == NULL)
-    {
-        ht_set(clientTable, info, (void *)clientFd);
-
-        // success
-        char *response = (char *)malloc(8 * sizeof(char));
-        strcpy(response, "success");
-
-        send(*clientFd, response, strlen(response), 0);
-        free(response);
-    }
-}
-
-void handleRequest(void *arg)
-{
-    int *clientFd = (int *)arg;
-
-    char *request = (char *)malloc(SIZE * sizeof(char));
-
-    read(*clientFd, request, SIZE);
-
-    char method[10];
-    char *info = (char *)malloc(100 * sizeof(char));
-
-    sscanf(info, "%s %s", method, info);
-
-    if (strcmp(method, "LOGIN"))
-    {
-        login(request, clientFd);
-    }
-    else if (strcmp(method, "LOGOUT"))
-    {
-        logout(request, clientFd);
-    }
-
-    free(request);
-}
-
 void runServer()
 {
     fd_set readfds;
     int max_fd, readyfds;
 
+    printf("run server\n");
     while (1)
     {
         FD_ZERO(&readfds);
@@ -159,7 +114,6 @@ void runServer()
 
 int main()
 {
-    ht *clientTable = ht_create();
 
     serverAddr.sin_family = AF_INET;
     serverAddr.sin_port = htons(PORT);
@@ -186,8 +140,6 @@ int main()
     }
 
     runServer();
-
-    ht_destroy(clientTable);
 
     return 0;
 }

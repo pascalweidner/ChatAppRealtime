@@ -10,9 +10,6 @@
 #include <unistd.h>
 #include <errno.h>
 
-#include <signal.h>
-#include <pthread.h>
-
 int readline(char *buffer, int maxchars, char eoc) {
     int n = 0;
     while (n < maxchars) {
