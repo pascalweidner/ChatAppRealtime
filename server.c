@@ -96,6 +96,7 @@ void runServer()
             // get client ip
             strncpy(outBuffer[i], inet_ntoa(clientIPs[i].sin_addr), INET_ADDRSTRLEN);
 
+            printf("test");
             fprintf(stdout, "%s: %s", outBuffer[i], inBuffer[i]);
 
             strcat(outBuffer[i], " : ");

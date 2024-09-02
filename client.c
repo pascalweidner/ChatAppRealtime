@@ -10,11 +10,14 @@
 #include <unistd.h>
 #include <errno.h>
 
-int readline(char *buffer, int maxchars, char eoc) {
+int readline(char *buffer, int maxchars, char eoc)
+{
     int n = 0;
-    while (n < maxchars) {
+    while (n < maxchars)
+    {
         buffer[n] = getc(stdin);
-        if(buffer[n] == eoc) {
+        if (buffer[n] == eoc)
+        {
             break;
         }
         n++;
@@ -22,12 +25,14 @@ int readline(char *buffer, int maxchars, char eoc) {
     return n;
 }
 
-int main() {
+int main()
+{
     int sockfd;
     struct sockaddr_in serv_addr;
     char sendline[1024], recvline[1024];
 
-    if((sockfd = socket(AF_INET, SOCK_STREAM, 0)) <= 0) {
+    if ((sockfd = socket(AF_INET, SOCK_STREAM, 0)) <= 0)
+    {
         perror("error while creating socket...");
         exit(1);
     }
@@ -35,12 +40,14 @@ int main() {
     serv_addr.sin_family = AF_INET;
     serv_addr.sin_port = htons(2728);
 
-    if(inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr)<=0) {
+    if (inet_pton(AF_INET, "127.0.0.1", &serv_addr.sin_addr) <= 0)
+    {
         perror("addre");
         exit(-1);
     }
 
-    if(connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+    if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0)
+    {
         perror("connect error...");
         exit(1);
     }
@@ -48,30 +55,34 @@ int main() {
     fd_set waitfds;
     int readyfds;
 
-    while(1) {
+    while (1)
+    {
         FD_ZERO(&waitfds);
 
-        //add mastersockfd
+        // add mastersockfd
         FD_SET(sockfd, &waitfds);
         FD_SET(0, &waitfds);
 
         memset(recvline, 0, 1024);
         memset(sendline, 0, 1024);
 
-        //connfd will be always largest
+        // connfd will be always largest
         readyfds = select(sockfd + 1, &waitfds, NULL, NULL, NULL);
-        if((readyfds < 0) && (errno!=EINTR)) {
+        if ((readyfds < 0) && (errno != EINTR))
+        {
             printf("select error");
         }
 
         // if stdin ready, read it and send
-        if (FD_ISSET(0, &waitfds)) {
-            readline(sendline, 1024, '\0');
+        if (FD_ISSET(0, &waitfds))
+        {
+            readline(sendline, 1024, '\n');
             write(sockfd, sendline, strlen(sendline));
         }
 
         // if socket ready, read it and print
-        if(FD_ISSET(sockfd, &waitfds)) {
+        if (FD_ISSET(sockfd, &waitfds))
+        {
             read(sockfd, recvline, 1024);
             fprintf(stdout, "%s", recvline);
         }
