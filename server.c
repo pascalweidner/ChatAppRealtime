@@ -81,6 +81,7 @@ void runServer()
                 memset(outBuffer[i], 0, 1024);
             }
 
+            // TODO: make this mutlithreaded
             // read returns 0 if connection closed normally
             // and - 1 if error
             if (read(connfds[i], inBuffer[i], 1024) <= 0)
