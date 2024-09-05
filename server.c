@@ -25,6 +25,7 @@ struct sockaddr_in serverAddr;
 int addrlen = sizeof(serverAddr);
 char inBuffer[MAX_CLIENTS][1024] = {0};
 char outBuffer[MAX_CLIENTS][1024] = {0};
+char names[][];
 
 void runServer()
 {
