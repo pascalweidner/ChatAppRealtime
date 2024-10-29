@@ -45,7 +45,7 @@ char *handshake(SOCKET *socket_client) {
         }
     }
 
-    if(!strncmp(buffer, "HELLO ", 6))) {
+    if(!strncmp(buffer, "HELLO ", 6)) {
         free(usr);
         return NULL;
     }
@@ -53,7 +53,13 @@ char *handshake(SOCKET *socket_client) {
     char *name = buffer + 6;
     char *endName = strstr(name, "\r\n");
     *endName = '\0';
-    strcpy(usr->name, name);
+    if(endName - name < 100) {     
+        strcpy(usr->name, name);
+    }
+    else {
+        free(usr);
+        return NULL;
+    }
 
     // TODO: make it thread safe
     if(head == NULL) {
@@ -69,7 +75,20 @@ char *handshake(SOCKET *socket_client) {
 }
 
 void serveToRoom(SOCKET *socket_client, char *name, char *message) {
+    char buffer[1126];
+    strcpy(buffer, name);
+    strcat(buffer, ": ");
+    strcat(message);
 
+
+    struct user *p = head;
+    while(p != NULL) {
+        if(p->socket_user == socket_client) {
+            continue;
+        }
+
+        int bytes_sent = send(*(p->socket_user), buffer, 1126, 0);
+    }
 }
 
 void *handleClient(void *vargp) {
