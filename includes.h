@@ -7,7 +7,7 @@
 #include <errno.h>
 #include <pthread.h>
 
-#define ISVALIDSOCKET(s) ((s) != INVALID_SOCKET)
+#define ISVALIDSOCKET(s) ((s) >= 0)
 #define SOCKET int
 
 #include <stdio.h>

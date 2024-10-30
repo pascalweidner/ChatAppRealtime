@@ -19,18 +19,19 @@ void deleteUser(struct user *usr) {
     
 }
 
-char *handshake(SOCKET *socket_client) {
+struct user *handshake(SOCKET *socket_client) {
     struct user *usr = (struct user*)malloc(sizeof(struct user));
     usr->next = NULL;
     usr->socket_user = socket_client;
 
+    //char *buffer = (char*)malloc(1025);
     char buffer[1025];
+    memset(&buffer, 0, 1025);
     int rec = 0;
     char *p = buffer;
-    char *q;
 
     while (1) {
-        int bytes_received = recv(*socket_client, p, 1024 - rec, 0);
+        int bytes_received = recv(*socket_client, buffer, 1024, 0);
         if (bytes_received < 1) {
             close(*socket_client);
             free(usr);
@@ -38,20 +39,28 @@ char *handshake(SOCKET *socket_client) {
         }
         p += bytes_received;
         rec += bytes_received;
-        buffer[rec + 1] = '\0';
+        buffer[rec] = '\0';
 
-        if((q = strstr("\r\n\r\n"))) {
+        char *q = strstr(buffer, "\n");
+        if(q == NULL) {
+            return NULL;
+        }
+        else {
             break;
         }
     }
 
-    if(!strncmp(buffer, "HELLO ", 6)) {
+    if(strncmp(buffer, "HELLO ", 6) != 0) {
         free(usr);
         return NULL;
     }
 
     char *name = buffer + 6;
-    char *endName = strstr(name, "\r\n");
+    char *endName = strstr(name, "\n");
+    if(endName == NULL) {
+        free(usr);
+        return NULL;
+    }
     *endName = '\0';
     if(endName - name < 100) {     
         strcpy(usr->name, name);
@@ -78,7 +87,7 @@ void serveToRoom(SOCKET *socket_client, char *name, char *message) {
     char buffer[1126];
     strcpy(buffer, name);
     strcat(buffer, ": ");
-    strcat(message);
+    strcat(buffer, message);
 
 
     struct user *p = head;
@@ -88,6 +97,8 @@ void serveToRoom(SOCKET *socket_client, char *name, char *message) {
         }
 
         int bytes_sent = send(*(p->socket_user), buffer, 1126, 0);
+        printf("bytes_sent: %d\n", bytes_sent);
+        p = p->next;
     }
 }
 
@@ -97,34 +108,44 @@ void *handleClient(void *vargp) {
     struct user *usr = handshake(socket_client);
     if(usr == NULL) {
         free(socket_client);
-        return;
+        return NULL;
     }
 
-    char buffer[1025];
-    int rec = 0;
-    char *p = buffer, *q;
+    printf("Name: %s\n", usr->name);
 
     while(1) {
-        int bytes_received = recv(*socket_client, p, 1024 - rec, 0);
-        if(bytes_received < 1) {
-            printf("Connection was closed by peer or error occured\n");
-            goto cleanup
+        char buffer[1025];
+        memset(&buffer, 0, 1025);
+        int rec = 0;
+        char *p = buffer, *q;
+
+        while(1) {
+            int bytes_received = recv(*socket_client, p, 1024 - rec, 0);
+            if(bytes_received < 1) {
+                printf("Connection was closed by peer or error occured\n");
+                goto cleanup;
+            }
+
+            p += bytes_received;
+            rec += bytes_received;
+            buffer[rec] = '\0';
+
+            printf("buffer: %s\n", buffer);
+
+            q = strstr(buffer, "\n");
+            if(q != NULL) {
+                break;
+            }
         }
 
-        p += bytes_received;
-        rec += bytes_received;
-        buffer[rec + 1] = '\0';
+        printf("test\n");
 
-        if((q = strstr("\r\n"))) {
-            break;
-        }
+        serveToRoom(socket_client, usr->name, buffer);
     }
-
-    serveToRoom(socket_client, usr->name, buffer);
 
 
 cleanup:
-    close(socket_client);
+    close(*socket_client);
     deleteUser(usr);
     free(socket_client);
 }
@@ -132,7 +153,7 @@ cleanup:
 int main() {
     // initialize user list
     head = NULL;
-    end = NULL
+    end = NULL;
 
     // Create local address
     struct addrinfo hints;
@@ -146,10 +167,15 @@ int main() {
 
     // Create listening socket
     SOCKET socket_listen;
-    socket_Listen = socket(bind_address->ai_family, bind_address->ai_socktype, bind_address->ai_protocol);
+    socket_listen = socket(bind_address->ai_family, bind_address->ai_socktype, bind_address->ai_protocol);
     if(!ISVALIDSOCKET(socket)) {
         fprintf(stderr, "socket() failed. (%s)\n", strerror(errno));
         return 1;
+    }
+
+    int yes = 1;
+    if(setsockopt(socket_listen, SOL_SOCKET, SO_REUSEADDR, (void*)&yes, sizeof(yes)) <0) {
+        fprintf(stderr, "setsockopt() failed. (%d)\n", errno);
     }
 
     // Bind socket
