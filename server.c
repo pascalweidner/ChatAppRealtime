@@ -92,7 +92,9 @@ void serveToRoom(SOCKET *socket_client, char *name, char *message) {
 
     struct user *p = head;
     while(p != NULL) {
+        printf("name: %s\n", p->name);
         if(p->socket_user == socket_client) {
+            p = p->next;
             continue;
         }
 
@@ -118,27 +120,23 @@ void *handleClient(void *vargp) {
         memset(&buffer, 0, 1025);
         int rec = 0;
         char *p = buffer, *q;
-
-        while(1) {
-            int bytes_received = recv(*socket_client, p, 1024 - rec, 0);
-            if(bytes_received < 1) {
-                printf("Connection was closed by peer or error occured\n");
-                goto cleanup;
-            }
-
-            p += bytes_received;
-            rec += bytes_received;
-            buffer[rec] = '\0';
-
-            printf("buffer: %s\n", buffer);
-
-            q = strstr(buffer, "\n");
-            if(q != NULL) {
-                break;
-            }
+        int bytes_received = recv(*socket_client, p, 1024 - rec, 0);
+        if(bytes_received < 1) {
+            serveToRoom(socket_client, usr->name, "left the Room!");
+            printf("Connection was closed by peer or error occured\n");
+            goto cleanup;
         }
 
-        printf("test\n");
+        p += bytes_received;
+        rec += bytes_received;
+        buffer[rec] = '\0';
+
+        printf("buffer: %s\n", buffer);
+
+        q = strstr(buffer, "\n");
+        if(q == NULL) {
+            break;
+        }
 
         serveToRoom(socket_client, usr->name, buffer);
     }
