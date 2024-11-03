@@ -2,6 +2,8 @@
 
 struct user;
 
+pthread_mutex_t lock;
+
 struct user
 {
     char name[100];
@@ -14,10 +16,30 @@ static struct user *end;
 
 struct user *getUser(SOCKET *socket_client)
 {
+    struct user *p = head;
+    while(p != NULL) {
+        if(p->socket_user == socket_client) {
+            return p;
+        }
+        p = p->next;
+    }
+
+    return NULL;
 }
 
 void deleteUser(struct user *usr)
 {
+    if(usr == NULL) {
+        fprintf(stderr, "usr can not be NULL\n");
+        exit(1);
+    }
+    struct user *p = head;
+    while(p != NULL && p->next != NULL) {
+        if(p->next == usr) {
+            p->next = p->next->next;
+        }
+        p = p->next;
+    }
 }
 
 struct user *handshake(SOCKET *socket_client)
@@ -80,7 +102,7 @@ struct user *handshake(SOCKET *socket_client)
         return NULL;
     }
 
-    // TODO: make it thread safe
+    pthread_mutex_lock(&lock);
     if (head == NULL)
     {
         head = usr;
@@ -91,6 +113,7 @@ struct user *handshake(SOCKET *socket_client)
         end->next = usr;
         end = usr;
     }
+    pthread_mutex_unlock(&lock);
 
     return usr;
 }
@@ -105,7 +128,6 @@ void serveToRoom(SOCKET *socket_client, char *name, char *message)
     struct user *p = head;
     while (p != NULL)
     {
-        printf("name: %s\n", p->name);
         if (p->socket_user == socket_client)
         {
             p = p->next;
@@ -125,14 +147,12 @@ void *handleClient(void *vargp)
     struct user *usr = handshake(socket_client);
     if (usr == NULL)
     {
-        printf("test\n");
         free(socket_client);
         return NULL;
     }
 
-    printf("Name: %s\n", usr->name);
 
-    serveToRoom(socket_client, usr->name, "joined the Room!");
+    serveToRoom(socket_client, usr->name, "joined the Room!\n");
 
     while (1)
     {
@@ -143,7 +163,8 @@ void *handleClient(void *vargp)
         int bytes_received = recv(*socket_client, p, 1024 - rec, 0);
         if (bytes_received < 1)
         {
-            serveToRoom(socket_client, usr->name, "left the Room!");
+            //deleteUser(usr);
+            serveToRoom(socket_client, usr->name, "left the Room!\n");
             printf("Connection was closed by peer or error occured\n");
             goto cleanup;
         }
@@ -172,6 +193,11 @@ int main()
     // initialize user list
     head = NULL;
     end = NULL;
+
+    if(pthread_mutex_init(&lock, NULL) != 0) {
+        fprintf(stderr, "\n mutex init has failed \n");
+        return 1;
+    }
 
     // Create local address
     struct addrinfo hints;
@@ -235,4 +261,6 @@ int main()
         pthread_create(&thread_id, NULL, handleClient, (void *)socket_client);
         pthread_detach(thread_id);
     }
+
+    pthread_mutex_destroy(&lock);
 }
